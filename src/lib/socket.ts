@@ -1,13 +1,17 @@
 import { io, Socket } from "socket.io-client";
 
-
+let socket: Socket | null = null
 
 export const getSocket = () => {
-    let socket: Socket | null = null
+    const url = process.env.NEXT_PUBLIC_SOCKET_URL
+    if (!url) console.log("URL do socket não definida corretamente.")
     if (!socket) {
-        socket = io(process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://localhost:2121", {
+        socket = io(url, {
+            autoConnect: false,
             transports: ["websocket"],
-            autoConnect: false
+            auth: {
+                token: "token-temporario"
+            }
         })
     }
 
