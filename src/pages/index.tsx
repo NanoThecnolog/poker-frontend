@@ -18,6 +18,7 @@ export default function Home() {
   const [tableState, setTableState] = useState<TableState | null>(null)
   const [tables, setTables] = useState<TableList[]>([])
   const [userId, setUserId] = useState<string>('')
+  const [hand, setHand] = useState<string[]>([])
 
 
   //const userId = nanoid()
@@ -44,7 +45,7 @@ export default function Home() {
     const client = new SetupAPIClient()
     try {
       const { data } = await client.backend.get('/tables')
-      console.log("mesas disponíveis", data)
+      //console.log("mesas disponíveis", data)
       setTables(data)
     } catch (err) {
       console.log("Erro ao buscar tabelas ativas", err)
@@ -59,9 +60,9 @@ export default function Home() {
     } else setUserId(userid)
   }, [])
 
-  /*useEffect(() => {
+  useEffect(() => {
     getTables()
-  }, [deck])*/
+  }, [])
 
   useEffect(() => {
     const socket = socketRef.current;
@@ -71,31 +72,53 @@ export default function Home() {
 
     socket.on("connect", () => {
       console.log("socket conectado:", socket.id)
+
+    })
+
+    socket.on("table:listing", (tables) => {
+      console.log("recebendo table:list", tables)
+      setTables(tables)
     })
 
     socket.on("table:state", (state) => {
       console.log("Estado inicial da mesa", state)
       setTableState(state)
+      //getTables()
     })
 
     socket.on("table:update", (state) => {
       console.log("Atualização de estado da mesa", state)
       setTableState(state)
+      //getTables()
     })
-    socket.on("table:playerJoined", (state) => {
-      console.log("jogador entrou na mesa", state)
+    socket.on("table:playerJoined", (uid) => {
+      console.log("jogador entrou na mesa", uid)
+      //getTables()
+    })
+    socket.on("table:playerLeft", (uid) => {
+      console.log("user saiu da mesa", uid)
+      //getTables()
     })
     socket.on("table:created", (table) => {
       console.log("Mesa criada", table)
-      getTables()
-      //setTables(prev => ({ ...prev, table }))
+      //getTables()
+      setTables(prev => ({ ...prev, table }))
     })
-    socket.on("table:removed", ({ tableId }) => {
+
+    socket.on("table:removed", ({ tableId }: { tableId: string }) => {
       setTables(prev => prev.filter(t => t.tableId !== tableId))
+    })
+
+    socket.on("player:hand", ({ hand }: { hand: string[] }) => {
+      console.log("mão do jogador", hand)
+      setHand(hand)
     })
 
     socket.on("table:error", (err) => {
       console.error(err.message)
+    })
+    socket.on("player:error", (message) => {
+      console.log("Erro do jogador", message)
     })
     socket.on("game:end", (result) => {
       console.log("resultado final do jogo", result)
@@ -103,22 +126,28 @@ export default function Home() {
 
     return () => {
       socket.off("connect")
+      socket.off("table:listing")
       socket.off("table:state")
       socket.off("table:update")
       socket.off("table:playerJoined")
+      socket.off("table:playerLeft")
       socket.off("table:created")
       socket.off("table:removed")
+      socket.off("table:error")
       socket.off("game:end")
+      socket.off("player:error")
+      socket.off("player:hand")
       socket.disconnect()
       console.log("socket desconectado.")
     }
   }, [])
 
-  const createTable = async () => {
+  const createTable = async () => {//request pra rota backend, depois emite evento com deck_id
     const client = new SetupAPIClient()
     try {
       const { data } = await client.backend.get<NewTableResponse>('/new/table')
       const socket = socketRef.current;
+      socket.emit("table:created", data.deck_id)
       setDeck(data)
     } catch (err) {
       console.error("Erro ao entrar ou criar mesa", err)
@@ -126,12 +155,11 @@ export default function Home() {
   }
 
   const joinTable = async (tableId: string) => {
-    console.log("clicando")
     const socket = socketRef.current;
-    console.log(socket)
+    //console.log(socket)
 
     if (!socket.connected) return console.warn("Socket não conectado")
-    if (socket.connected) console.log("Conectado")
+    //if (socket.connected) console.log("Conectado")
 
     console.log("Emitindo table:join", tableId)
 
@@ -139,7 +167,7 @@ export default function Home() {
       tableId: tableId,
       userId: userId
     })
-
+    //socket.emit("table:list")
   }
   const startHand = () => {
     const socket = socketRef.current;
@@ -216,9 +244,10 @@ export default function Home() {
 
             {tableState && tableState.phase === "waiting" && tableState.players.length >= 2 &&
               <div>
-                <h4>Iniciar mão</h4>
-                <button onClick={startHand}>Startar mão</button>
-              </div>}
+                <h4>Iniciar jogo</h4>
+                <button onClick={startHand}>Iniciar</button>
+              </div>
+            }
             {tableState && tableState.phase !== "waiting" &&
               <>
                 <p>Fase: {tableState.phase}</p>
@@ -229,22 +258,25 @@ export default function Home() {
                     <div>
                       <button onClick={() => sendAction(userId, "fold")}>Fold</button>
                       <button onClick={() => sendAction(userId, "call")}>Call</button>
-                      <button onClick={() => sendAction(userId, "bet", 10)}>bet</button>
+                      <button onClick={() => sendAction(userId, "bet", 100)}>bet</button>
                       <button onClick={() => sendAction(userId, "check")}>Check</button>
+                      <button onClick={() => sendAction(userId, "raise", 30)}>raise</button>
+                      <button onClick={() => sendAction(userId, "allin")}> All-in</button>
                     </div>
                   </>
                 }
-                {/*tableState.turnUserId === userId2 &&
-                  <>
-                    <h5>Turno do usuario 2</h5>
-                    <div>
-                      <button onClick={() => sendAction(userId2, "fold")}>Fold</button>
-                      <button onClick={() => sendAction(userId2, "call")}>Call</button>
-                      <button onClick={() => sendAction(userId2, "bet")}>bet</button>
-                      <button onClick={() => sendAction(userId2, "check")}>Check</button>
-                    </div>
-                  </>
-                */}
+                {hand.length > 0 &&
+                  <div className={styles.hand}>
+                    {hand.map((h, i) =>
+                      <img
+                        key={i}
+                        src={`https://deckofcardsapi.com/static/img/${h}.png`}
+                        alt={`Carta ${i + 1}`}
+                        className={styles.cardImage}
+                      />
+                    )}
+                  </div>
+                }
               </>
             }
             <div className={styles.cardsComunityContainer}>
@@ -254,7 +286,7 @@ export default function Home() {
                   <img
                     key={i}
                     src={`https://deckofcardsapi.com/static/img/${c}.png`}
-                    alt={`Carta ${i}`}
+                    alt={`Carta ${i + 1}`}
                     className={styles.cardImage}
                   />
 
