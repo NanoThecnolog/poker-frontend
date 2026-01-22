@@ -3,22 +3,20 @@ import styles from "@/styles/Home.module.scss";
 import { useEffect, useRef, useState } from "react";
 import { getSocket } from "@/lib/socket";
 import { SetupAPIClient } from "@/connections/apiBackend";
-import { NewTableResponse } from "@/@types/newTableResponse";
-import { TableState } from "@/@types/tableState";
+import { PlayerState, TableState } from "@/@types/tableState";
 import { TableList } from "@/@types/tableList";
 import { nanoid } from 'nanoid'
 import { parseCookies, setCookie } from 'nookies'
-import { Table } from "@/services/actions/table";
 import TableCard from "@/components/Tables";
 
 
 export default function Home() {
   //const [tableId, setTableId] = useState<string>("")
-  const [deck, setDeck] = useState<NewTableResponse | null>(null)
   const [tableState, setTableState] = useState<TableState | null>(null)
   const [tables, setTables] = useState<TableList[]>([])
   const [userId, setUserId] = useState<string>('')
   const [hand, setHand] = useState<string[]>([])
+  const [player, setPlayer] = useState<PlayerState | null>(null)
 
 
   //const userId = nanoid()
@@ -59,9 +57,16 @@ export default function Home() {
       setUserId(userid)
     } else setUserId(userid)
   }, [])
+  useEffect(() => {
+    const player = tableState?.players.find(p => p.userId === userId)
+    if (!player) return
+    setPlayer(player)
+  }, [tableState])
 
   useEffect(() => {
-    getTables()
+    //getTables()
+    const socket = socketRef.current
+    socket.emit("table:list")
   }, [])
 
   useEffect(() => {
@@ -91,8 +96,9 @@ export default function Home() {
       setTableState(state)
       //getTables()
     })
-    socket.on("table:playerJoined", (uid) => {
-      console.log("jogador entrou na mesa", uid)
+    socket.on("table:playerJoined", (state) => {
+      console.log("jogador entrou na mesa", state)
+      setTableState(state)
       //getTables()
     })
     socket.on("table:playerLeft", (uid) => {
@@ -102,7 +108,7 @@ export default function Home() {
     socket.on("table:created", (table) => {
       console.log("Mesa criada", table)
       //getTables()
-      setTables(prev => ({ ...prev, table }))
+      //setTables(prev => ({ ...prev, table }))
     })
 
     socket.on("table:removed", ({ tableId }: { tableId: string }) => {
@@ -143,15 +149,9 @@ export default function Home() {
   }, [])
 
   const createTable = async () => {//request pra rota backend, depois emite evento com deck_id
-    const client = new SetupAPIClient()
-    try {
-      const { data } = await client.backend.get<NewTableResponse>('/new/table')
-      const socket = socketRef.current;
-      socket.emit("table:created", data.deck_id)
-      setDeck(data)
-    } catch (err) {
-      console.error("Erro ao entrar ou criar mesa", err)
-    }
+    const socket = socketRef.current;
+    socket.emit("table:new")
+    //socket.emit("table:created", data.deck_id)
   }
 
   const joinTable = async (tableId: string) => {
@@ -168,6 +168,10 @@ export default function Home() {
       userId: userId
     })
     //socket.emit("table:list")
+  }
+  const setPrepared = () => {
+
+    setPlayer((prev) => ({ ...prev!, prepared: true }))
   }
   const startHand = () => {
     const socket = socketRef.current;
@@ -201,6 +205,14 @@ export default function Home() {
         <link rel="icon" href="/favicon.ico" />
       </Head>
       <main className={styles.container}>
+        {player &&
+          <div>
+            <div>
+              fichas:
+              {player.stack}
+            </div>
+          </div>
+        }
 
         <div>
           <h2>abrir uma mesa</h2>
@@ -229,6 +241,12 @@ export default function Home() {
                 <p>Aposta atual: {tableState.currentBet}</p>
                 <p>Pot: {tableState.pot}</p>
                 <p>minRaise: {tableState.minRaise}</p>
+                {
+                  /*
+                  <p>verificar jogadores preparados. Todos precisam estar preparados para iniciar o jogo. Adicionar botão de preparado e adicionar verificação na mesa se todos estão preparados.</p>
+                <p>Parar de depender de tableState para mostrar o botão de iniciar jogo. só mostrar depois que todos os jogadores da mesa estiverem preparados.</p>
+                  */
+                }
               </div>
             </div>
             {
@@ -241,11 +259,21 @@ export default function Home() {
             </div>
                */
             }
+            {
+              tableState && tableState.phase === "waiting" && player &&
+              <div>
+                <div>
+                  <button onClick={setPrepared}>Preparado</button>
+                </div>
+                <div className={styles.playerStatus} style={{ backgroundColor: player.prepared ? "green" : "red" }} />
+              </div>
+            }
 
-            {tableState && tableState.phase === "waiting" && tableState.players.length >= 2 &&
+            {tableState.phase === "waiting" && tableState.players.length >= 2 &&
               <div>
                 <h4>Iniciar jogo</h4>
                 <button onClick={startHand}>Iniciar</button>
+                {tableState.players[0].prepared}
               </div>
             }
             {tableState && tableState.phase !== "waiting" &&

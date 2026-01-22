@@ -29,7 +29,7 @@ a {
   text-decoration: none;
 }
 
-button {
+/*button {
   padding: 8px 15px;
   cursor: pointer;
   background-color: white;
@@ -38,10 +38,38 @@ button {
   border-radius: .4rem;
   font-weight: 900;
   font-family: Verdana, Geneva, Tahoma, sans-serif;
+}*/
+button {
+  background: linear-gradient(180deg, #2ecc71, #1e9e55);
+  border: none;
+  border-radius: 6px;
+  padding: 10px 16px;
+
+  color: #08140e;
+  font-weight: 600;
+  cursor: pointer;
+
+  box-shadow: 0 6px 0 #0f6b3a;
+  transition: all 0.15s ease;
+
+  &:hover {
+    filter: brightness(1.1);
+  }
+
+  &:active {
+    transform: translateY(4px);
+    box-shadow: 0 2px 0 #0f6b3a;
+  }
 }
 
 @media (prefers-color-scheme: dark) {
   html {
     color-scheme: dark;
+  }
+}
+
+@media (max-width: 480px) {
+  button {
+    width: 100%;
   }
 }
